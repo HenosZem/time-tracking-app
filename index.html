@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time Tracking Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="dashboard">
+    <header class="dashboard-header">
+      <div>
+        <h1>Time Tracking Dashboard</h1>
+        <p>Monitor your work hours and productivity</p>
+      </div>
+      <div class="controls">
+        <select id="period-select">
+          <option value="today">Today</option>
+          <option value="week" selected>This Week</option>
+          <option value="month">Last 30 Days</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        <input type="date" id="date-from" style="display: none;" />
+        <input type="date" id="date-to" style="display: none;" />
+      </div>
+    </header>
+
+    <section class="summary-cards" id="summary-cards"></section>
+
+    <section class="logs-card">
+      <div class="logs-header">
+        <div>
+          <h2>Time Logs</h2>
+          <p id="logs-subtitle">Detailed breakdown of your work hours</p>
+        </div>
+        <div>
+          <span id="entry-count"></span>
+          <button id="export-btn">Export CSV</button>
+        </div>
+      </div>
+      <div class="logs-table">
+        <div class="logs-table-header">
+          <span>Date</span>
+          <span>Clock In</span>
+          <span>Clock Out</span>
+          <span>Break</span>
+          <span>Total Hours</span>
+          <span>Status</span>
+        </div>
+        <div class="logs-table-body" id="logs-body"></div>
+      </div>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
