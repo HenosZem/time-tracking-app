@@ -24,7 +24,32 @@
   <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
 
   <script type="module">
-    // your earnings fetch JavaScript goes here
+    const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
+    async function getCurrentUserId() {
+      const { data, error } = await supabase.auth.getUser();
+      return data?.user?.id || null;
+    }
+  
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      alert("Please login first.");
+      window.location.href = "/login.html";
+    }
+  
+    const { data, error } = await supabase
+      .from("pay_periods")
+      .select("*")
+      .eq("user_id", userId);
+  
+    if (error) {
+      document.body.innerHTML += "<p>Error loading earnings.</p>";
+    } else {
+      data.forEach(row => {
+        document.body.innerHTML += `<p>From ${row.start_date} to ${row.end_date}: $${row.gross_pay}</p>`;
+      });
+    }
   </script>
-</body>
-</html>
+  
