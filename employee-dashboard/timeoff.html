@@ -31,7 +31,6 @@
       padding: 10px 15px;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
   <h1>Submit Time-Off Request</h1>
@@ -54,35 +53,8 @@
 
   <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
 
-<<<<<<< HEAD
-  <script type="module">
-    const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  
-    async function getCurrentUserId() {
-      const { data, error } = await supabase.auth.getUser();
-      return data?.user?.id || null;
-    }
-  
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      alert("Please login first.");
-      window.location.href = "/login.html";
-    }
-  
-    await supabase.from("time_off_requests").insert({
-      employee_id: userId,
-      start_date: "2025-07-18",
-      end_date: "2025-07-20",
-      status: "pending",
-      reason: "Vacation"
-    });
-  
-    alert("Time-off request submitted.");
-  </script>  
-=======
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
   <script src="timeoff.js"></script>
 </body>
 </html>
->>>>>>> frontend-pages
