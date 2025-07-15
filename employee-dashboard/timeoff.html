@@ -15,14 +15,46 @@
     a.button:hover {
       background: #0056b3;
     }
+    form {
+      margin-top: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, textarea {
+      width: 300px;
+      padding: 5px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 15px;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
   <h1>Submit Time-Off Request</h1>
   <p>This page will allow employees to request time off.</p>
 
+  <form id="timeoff-form">
+    <label for="start-date">Start Date:</label>
+    <input type="date" id="start-date" required>
+
+    <label for="end-date">End Date:</label>
+    <input type="date" id="end-date" required>
+
+    <label for="reason">Reason:</label>
+    <textarea id="reason" rows="4" required></textarea>
+
+    <button type="submit">Submit Request</button>
+  </form>
+
+  <p id="message"></p>
+
   <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
 
+<<<<<<< HEAD
   <script type="module">
     const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
@@ -49,3 +81,8 @@
   
     alert("Time-off request submitted.");
   </script>  
+=======
+  <script src="timeoff.js"></script>
+</body>
+</html>
+>>>>>>> frontend-pages
