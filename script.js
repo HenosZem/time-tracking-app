@@ -1,56 +1,65 @@
-//MOCK DATA
-const entries = [
-  { id: '1', date: '2024-01-15', clockIn: '09:00', clockOut: '17:30', breakMinutes: 60, totalHours: 7.5, employee: 'John', status: 'completed' },
-  { id: '2', date: '2024-01-14', clockIn: '08:45', clockOut: '17:15', breakMinutes: 45, totalHours: 7.75, employee: 'John', status: 'completed' },
-  { id: '3', date: '2024-01-13', clockIn: '09:15', clockOut: '17:45', breakMinutes: 60, totalHours: 7.5, employee: 'John', status: 'late' },
-  { id: '4', date: '2024-01-12', clockIn: '08:30', clockOut: '16:30', breakMinutes: 30, totalHours: 7.5, employee: 'John', status: 'completed' },
-  { id: '5', date: '2024-01-11', clockIn: '09:00', clockOut: '18:00', breakMinutes: 60, totalHours: 8, employee: 'John', status: 'completed' },
-  { id: '6', date: '2024-01-10', clockIn: '08:45', clockOut: '17:30', breakMinutes: 45, totalHours: 7.75, employee: 'John', status: 'completed' },
-];
+// Supabase client setup
+const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-//Utils
-const getToday = () => new Date().toISOString().split('T')[0];
+// Utils
+const getToday = () => new Date().toISOString().split("T")[0];
 
-function filterEntries(period, from, to) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  return entries.filter(entry => {
-    const entryDate = new Date(entry.date);
-    if (period === 'custom' && from && to) {
-      return entryDate >= new Date(from) && entryDate <= new Date(to);
-    }
-    switch (period) {
-      case 'today':
-        return entryDate.toDateString() === today.toDateString();
-      case 'week':
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - 7);
-        return entryDate >= weekStart;
-      case 'month':
-        const monthStart = new Date(today);
-        monthStart.setDate(today.getDate() - 30);
-        return entryDate >= monthStart;
-      default:
-        return true;
-    }
-  });
+function formatTime(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function updateDashboard() {
+function formatDate(dateStr) {
+  return new Date(dateStr).toISOString().split("T")[0];
+}
+
+// Fetch and filter entries from Supabase
+async function fetchEntries(period, from, to) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  let query = supabase.from("time_entries").select("*").eq("user_id", user.id);
+  const today = new Date();
+
+  if (period === 'custom' && from && to) {
+    query = query.gte("clock_in", from).lte("clock_in", to);
+  } else if (period === 'today') {
+    const start = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+    const end = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+    query = query.gte("clock_in", start).lte("clock_in", end);
+  } else if (period === 'week') {
+    const weekAgo = new Date();
+    weekAgo.setDate(today.getDate() - 7);
+    query = query.gte("clock_in", weekAgo.toISOString());
+  } else if (period === 'month') {
+    const monthAgo = new Date();
+    monthAgo.setDate(today.getDate() - 30);
+    query = query.gte("clock_in", monthAgo.toISOString());
+  }
+
+  const { data, error } = await query.order("clock_in", { ascending: false });
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return data;
+}
+
+// Dashboard update
+async function updateDashboard() {
   const period = document.getElementById('period-select').value;
   const from = document.getElementById('date-from').value;
   const to = document.getElementById('date-to').value;
 
-  const filtered = filterEntries(period, from, to);
-
-  //Stats
-  const totalHours = filtered.reduce((sum, e) => sum + e.totalHours, 0);
-  const totalDays = filtered.length;
+  const entries = await fetchEntries(period, from, to);
+  const totalHours = entries.reduce((sum, e) => sum + (e.total_hours || 0), 0);
+  const totalDays = entries.length;
   const avgHours = totalDays ? (totalHours / totalDays).toFixed(1) : 0;
-  const completed = filtered.filter(e => e.status === 'completed').length;
+  const completed = entries.filter(e => e.clock_out).length;
 
-  //Summary cards
+  // Summary cards
   const container = document.getElementById('summary-cards');
   container.innerHTML = '';
   const cards = [
@@ -66,46 +75,63 @@ function updateDashboard() {
     container.appendChild(card);
   });
 
-  //Time log interface
+  // Time log interface
   const logBody = document.getElementById('logs-body');
   logBody.innerHTML = '';
-  filtered.forEach(entry => {
+  entries.forEach(entry => {
+    const date = formatDate(entry.clock_in);
+    const clockIn = entry.clock_in ? formatTime(entry.clock_in) : '';
+    const clockOut = entry.clock_out ? formatTime(entry.clock_out) : '';
+    const breakMin = entry.break_minutes || 0;
+    const hours = entry.total_hours?.toFixed(2) || '';
+    const status = entry.clock_out ? 'completed' : 'pending';
+
     const row = document.createElement('div');
     row.className = 'row';
     row.innerHTML = `
-      <span>${entry.date}</span>
-      <span>${entry.clockIn}</span>
-      <span>${entry.clockOut}</span>
-      <span>${entry.breakMinutes}m</span>
-      <span>${entry.totalHours}h</span>
-      <span><span class="badge ${entry.status}">${entry.status}</span></span>
+      <span>${date}</span>
+      <span>${clockIn}</span>
+      <span>${clockOut}</span>
+      <span>${breakMin}m</span>
+      <span>${hours}h</span>
+      <span><span class="badge ${status}">${status}</span></span>
     `;
     logBody.appendChild(row);
   });
 
   document.getElementById('logs-subtitle').textContent = `Detailed breakdown of your work hours for ${period}`;
-  document.getElementById('entry-count').textContent = `${filtered.length} entries`;
+  document.getElementById('entry-count').textContent = `${entries.length} entries`;
 }
 
-//Export logic
-document.getElementById('export-btn').addEventListener('click', () => {
+// Export to CSV
+function exportCSV() {
   const period = document.getElementById('period-select').value;
   const from = document.getElementById('date-from').value;
   const to = document.getElementById('date-to').value;
-  const filtered = filterEntries(period, from, to);
 
-  const rows = [
-    ['Date', 'Clock In', 'Clock Out', 'Break (min)', 'Total Hours', 'Status'],
-    ...filtered.map(e => [e.date, e.clockIn, e.clockOut, e.breakMinutes, e.totalHours, e.status])
-  ];
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `time-logs-${period}-${getToday()}.csv`;
-  a.click();
-});
+  fetchEntries(period, from, to).then(entries => {
+    const rows = [
+      ['Date', 'Clock In', 'Clock Out', 'Break (min)', 'Total Hours', 'Status'],
+      ...entries.map(e => [
+        formatDate(e.clock_in),
+        formatTime(e.clock_in),
+        formatTime(e.clock_out),
+        e.break_minutes || 0,
+        e.total_hours || 0,
+        e.clock_out ? 'completed' : 'pending'
+      ])
+    ];
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `time-logs-${period}-${getToday()}.csv`;
+    a.click();
+  });
+}
 
+// Event Listeners
+document.getElementById('export-btn').addEventListener('click', exportCSV);
 document.getElementById('period-select').addEventListener('change', (e) => {
   const show = e.target.value === 'custom';
   document.getElementById('date-from').style.display = show ? 'inline-block' : 'none';
