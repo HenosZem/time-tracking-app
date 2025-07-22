@@ -1,0 +1,40 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+  background: #f4f4f4;
+}
+
+.payroll-summary {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.user-section {
+  margin-bottom: 20px;
+}
+
+.user-section h3 {
+  border-bottom: 1px solid #ccc;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background: #eee;
+}
+
+button {
+  margin-top: 20px;
+  padding: 10px 15px;
+}
