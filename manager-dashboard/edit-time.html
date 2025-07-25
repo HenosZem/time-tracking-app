@@ -4,13 +4,52 @@
   <meta charset="UTF-8" />
   <title>Edit Time Entries</title>
   <style>
-    a.button { display:inline-block; padding:10px; background:#007BFF; color:white; text-decoration:none; border-radius:5px; }
-    a.button:hover { background:#0056b3; }
+    a.button {
+      display: inline-block;
+      padding: 10px;
+      background: #007BFF;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+    }
+    a.button:hover {
+      background: #0056b3;
+    }
+    .entry {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
   <h1>Edit Time Entries</h1>
-  <p>This page will allow managers to edit employee time entries.</p>
   <a href="manager-dashboard.html" class="button">Back to Dashboard</a>
+
+  <div id="time-entry-list"></div>
+
+  <template id="entry-template">
+    <div class="entry" data-entry-id="">
+      <p><strong>Employee:</strong> <span class="employee-name"></span></p>
+      <p>Clock In: <span class="clock-in-display"></span></p>
+      <p>Clock Out: <span class="clock-out-display"></span></p>
+      <button class="edit-btn">Edit</button>
+
+      <div class="edit-form" style="display: none; margin-top: 10px;">
+        <label>Clock In:
+          <input type="datetime-local" class="edit-clock-in" />
+        </label><br>
+        <label>Clock Out:
+          <input type="datetime-local" class="edit-clock-out" />
+        </label><br>
+        <button class="save-btn">Save</button>
+        <button class="cancel-btn">Cancel</button>
+        <p class="edit-message"></p>
+      </div>
+    </div>
+  </template>
+
+  <script type="module" src="edit-time.js"></script>
 </body>
 </html>

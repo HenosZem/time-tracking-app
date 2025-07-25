@@ -1,55 +1,14 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
+console.log("clock-in-out.js loaded"); 
+
+// Supabase credentials
 const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
-const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// === SIGNUP LOGIC ===
-const signupForm = document.getElementById("signup-form");
-if (signupForm) {
-  signupForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("signup-email").value;
-    const password = document.getElementById("signup-password").value;
-
-    const { data, error } = await supabase.auth.signUp({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      alert("Signup error: " + error.message);
-    } else {
-      alert("Signup successful! Please check your email to confirm.");
-    }
-  });
-}
-
-// === LOGIN LOGIC ===
-const loginForm = document.getElementById("login-form");
-if (loginForm) {
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("login-email").value;
-    const password = document.getElementById("login-password").value;
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      alert("Login error: " + error.message);
-    } else {
-      alert("Login successful!");
-      window.location.href = "index.html";
-    }
-  });
-}
-
-// === TIME TRACKING ===
+// DOM references
 const clockInBtn = document.getElementById("clock-in-btn");
 const clockOutBtn = document.getElementById("clock-out-btn");
 const messageBox = document.getElementById("message");
@@ -115,7 +74,7 @@ if (clockOutBtn) {
       return;
     }
 
-    const { data: entries, error } = await supabase
+    const { data: entry, error } = await supabase
       .from("time_entries")
       .select("id, clock_in")
       .eq("user_id", user.id)
@@ -128,15 +87,14 @@ if (clockOutBtn) {
       return;
     }
 
-    if (!entries) {
+    if (!entry) {
       displayMessage("No active clock in found.");
       return;
     }
 
     const clockOutTime = new Date();
-    const clockInTime = new Date(entries.clock_in);
-    const totalHours =
-      (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+    const clockInTime = new Date(entry.clock_in);
+    const totalHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
 
     const { error: updateError } = await supabase
       .from("time_entries")
@@ -144,13 +102,13 @@ if (clockOutBtn) {
         clock_out: clockOutTime.toISOString(),
         total_hours: totalHours,
       })
-      .eq("id", entries.id);
+      .eq("id", entry.id);
 
     if (updateError) {
       displayMessage("Clock out failed: " + updateError.message);
     } else {
       displayMessage(
-        `Clock out successful. Total hours: ${totalHours.toFixed(2)}`
+        `Clocked in: ${clockInTime.toLocaleString()} \nClocked out: ${clockOutTime.toLocaleString()} \nTotal hours: ${totalHours.toFixed(2)}`
       );
     }
   });
