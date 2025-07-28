@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Manager/Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    nav { display: flex; gap: 10px; margin-bottom: 20px; }
+    a.button, button { padding: 10px; background: #007BFF; color: white; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; }
+    a.button:hover, button:hover { background: #0056b3; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 2em; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #f2f2f2; }
+    .hidden { display: none; }
+    #clock-in-out { margin-bottom: 2em; padding: 1em; background: #f7f7f7; border-radius: 8px; }
+    .payroll-calc-box { margin-bottom: 2em; background: #f9f9f9; padding: 1em; border-radius: 7px; }
+  </style>
+</head>
+<body>
+  <h1>Manager/Admin Dashboard</h1>
+  <nav>
+    <a href="#" class="button" onclick="showSection('employee-management')">Employee Management</a>
+    <a href="#" class="button" onclick="showSection('timesheet-overview')">Timesheet Overview</a>
+    <a href="#" class="button" onclick="showSection('payroll-summary')">Payroll Summary</a>
+    <a href="#" class="button" onclick="showSection('edit-entries')">Edit Entries</a>
+    <a href="#" class="button" onclick="showSection('timeoff-approval')">Time-Off Approval</a>
+    <a href="../login.html" class="button">Logout</a>
+  </nav>
+
+  <!-- Manager/Admin Clock In/Out Section -->
+  <section id="clock-in-out">
+    <h2>Clock In/Out</h2>
+    <button onclick="clockIn()">Clock In</button>
+    <button onclick="clockOut()">Clock Out</button>
+    <div id="clock-msg"></div>
+  </section>
+
+  <!-- Employee Management Section -->
+  <section id="employee-management" class="hidden">
+    <h2>Manage Employees</h2>
+    <div id="employee-table"></div>
+    <h3>Update Employee</h3>
+    <form id="update-employee-form">
+      <input type="hidden" id="emp-id" />
+      Name: <input type="text" id="emp-name" required />
+      Email: <input type="email" id="emp-email" required />
+      Hourly Rate: <input type="number" id="emp-hourly-rate" min="0" step="0.01" required />
+      <button type="submit">Update</button>
+    </form>
+  </section>
+
+  <!-- Timesheet Overview Section -->
+  <section id="timesheet-overview" class="hidden">
+    <h2>Timesheet Overview</h2>
+    <div style="margin-bottom:10px;">
+      <input id="filter-name" placeholder="Filter by name" style="margin-right:5px;" oninput="loadTimesheets()" />
+      <input id="filter-date" type="date" onchange="loadTimesheets()" />
+    </div>
+    <div id="timesheet-table"></div>
+  </section>
+
+  <!-- Payroll Summary Section -->
+  <section id="payroll-summary" class="hidden">
+    <h2>Payroll Summary</h2>
+    <!-- Payroll Calculation Controls -->
+    <div class="payroll-calc-box">
+      <form id="payroll-calc-form">
+        <label>
+          Employee:
+          <select id="payroll-employee-select"></select>
+        </label>
+        <label>
+          Pay Period:
+          <select id="payroll-period-select"></select>
+        </label>
+        <button type="submit">Calculate Payroll</button>
+      </form>
+      <div id="payroll-calc-result" style="margin-top:10px;"></div>
+    </div>
+    <div id="payroll-table"></div>
+  </section>
+
+  <!-- Edit Entries Section -->
+  <section id="edit-entries" class="hidden">
+    <h2>Edit Timeclock Entries</h2>
+    <div id="edit-table"></div>
+  </section>
+
+  <!-- Time-Off Approval Section -->
+  <section id="timeoff-approval" class="hidden">
+    <h2>Time-Off Approval</h2>
+    <div id="timeoff-table"></div>
+  </section>
+
+ 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html> 
