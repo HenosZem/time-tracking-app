@@ -15,82 +15,160 @@
     a.button:hover {
       background: #0056b3;
     }
+    button {
+      padding: 10px 16px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h1>Clock In / Clock Out</h1>
-  <p>This page will let employees clock in and out.</p>
-
-  <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
+  <a href="dashboards/employee-dashboard.html" class="button">Back to Dashboard</a>
 
   <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+    import { DateTime } from "https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/es6/luxon.min.js";
+
     const SUPABASE_URL = "https://hbmuqmmodxcbzfaiajdu.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibXVxbW1vZHhjYnpmYWlhamR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0MTU3MTUsImV4cCI6MjA2Njk5MTcxNX0.U0H1bJpgst-z1ewOYwg6rGi6u653uXHbbyz-XGO5EvU";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  
-    async function getCurrentUserId() {
-      const { data, error } = await supabase.auth.getUser();
-      return data?.user?.id || null;
-    }
-  
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      alert("Please login first.");
-      window.location.href = "/login.html";
-    }
-  
-    const clockInBtn = document.createElement("button");
-    clockInBtn.textContent = "Clock In";
-    clockInBtn.onclick = async () => {
-      const { data: existing } = await supabase
-        .from("time_entries")
-        .select("*")
-        .eq("user_id", userId)
-        .is("clock_out", null);
-  
-      if (existing.length > 0) {
-        alert("Already clocked in.");
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const formatTime = (dateStr) => {
+      return DateTime.fromISO(dateStr, { zone: "utc" })
+        .setZone("America/New_York")
+        .toFormat("MMM dd, yyyy, h:mm:ss a");
+    };
+
+    async function init() {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      const userId = user?.id;
+
+      if (!userId) {
+        alert("Please login first.");
+        window.location.href = "/login.html";
         return;
       }
-  
-      await supabase.from("time_entries").insert({
-        user_id: userId,
-        clock_in: new Date().toISOString()
-      });
-      alert("Clocked in!");
-    };
-    document.body.appendChild(clockInBtn);
-  
-    const clockOutBtn = document.createElement("button");
-    clockOutBtn.textContent = "Clock Out";
-    clockOutBtn.onclick = async () => {
-      const { data: entry } = await supabase
-        .from("time_entries")
-        .select("*")
+
+      // Fetch name from profiles using user_id
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("name")
         .eq("user_id", userId)
-        .is("clock_out", null)
-        .limit(1)
         .maybeSingle();
-  
-      if (!entry) {
-        alert("No active session found.");
-        return;
-      }
-  
-      const clockOut = new Date();
-      const clockIn = new Date(entry.clock_in);
-      const totalHours = (clockOut - clockIn) / 3600000;
-  
-      await supabase
-        .from("time_entries")
-        .update({
-          clock_out: clockOut.toISOString(),
-          total_hours: totalHours
-        })
-        .eq("id", entry.id);
-  
-      alert(`Clocked out. Total hours: ${totalHours.toFixed(2)}`);
-    };
-    document.body.appendChild(clockOutBtn);
+
+      const fullName = profile?.name || "Unknown";
+
+      // CLOCK IN
+      const clockInBtn = document.createElement("button");
+      clockInBtn.textContent = "Clock In";
+      clockInBtn.onclick = async () => {
+        const { data: existing, error } = await supabase
+          .from("time_entries")
+          .select("*")
+          .eq("user_id", userId)
+          .is("clock_out", null);
+
+        if (error) {
+          console.error("Error checking session:", error);
+          return;
+        }
+
+        if (existing.length > 0) {
+          alert("Already clocked in.");
+          return;
+        }
+
+        const now = new Date();
+        const { error: insertError } = await supabase.from("time_entries").insert({
+          user_id: userId,
+          name: fullName,
+          clock_in: now.toISOString()
+        });
+
+        if (insertError) {
+          console.error("Insert error:", insertError);
+          alert("Failed to clock in.");
+          return;
+        }
+
+        alert(`Clocked in as ${fullName} at: ${formatTime(now.toISOString())}`);
+      };
+      document.body.appendChild(clockInBtn);
+
+      // CLOCK OUT
+      const clockOutBtn = document.createElement("button");
+      clockOutBtn.textContent = "Clock Out";
+      clockOutBtn.onclick = async () => {
+        const { data: entry, error: fetchError } = await supabase
+          .from("time_entries")
+          .select("*")
+          .eq("user_id", userId)
+          .is("clock_out", null)
+          .order("clock_in", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error("Fetch error:", fetchError);
+          alert("Error finding session.");
+          return;
+        }
+
+        if (!entry) {
+          alert("No active session found.");
+          return;
+        }
+
+        const clockOut = new Date();
+
+        const { error: updateError } = await supabase
+          .from("time_entries")
+          .update({
+            clock_out: clockOut.toISOString(),
+            edited_by: userId
+          })
+          .eq("id", entry.id);
+
+        if (updateError) {
+          console.error("Update error:", updateError);
+          alert("Failed to clock out.");
+          return;
+        }
+
+        const { data: updatedEntry, error: reFetchError } = await supabase
+          .from("time_entries")
+          .select("*")
+          .eq("id", entry.id)
+          .maybeSingle();
+
+        if (reFetchError || !updatedEntry) {
+          console.error("Re-fetch error:", reFetchError);
+          alert("Failed to retrieve updated entry.");
+          return;
+        }
+
+        const clockIn = new Date(updatedEntry.clock_in);
+        const refreshedClockOut = new Date(updatedEntry.clock_out);
+        const totalHours = (refreshedClockOut - clockIn) / 3600000;
+
+        await supabase
+          .from("time_entries")
+          .update({
+            total_hours: totalHours
+          })
+          .eq("id", entry.id);
+
+        alert(
+          `Clocked out.\nName: ${updatedEntry.name}\nClock In: ${formatTime(updatedEntry.clock_in)}\nClock Out: ${formatTime(updatedEntry.clock_out)}\nTotal hours: ${totalHours.toFixed(2)}`
+        );
+      };
+      document.body.appendChild(clockOutBtn);
+    }
+
+    init();
   </script>
-  
+</body>
+</html>
