@@ -99,7 +99,7 @@ if (loginForm) {
     } else if (role === "employee") {
       window.location.href = "employee-dashboard/employee-dashboard.html";
     } else if (role === "manager") {
-      window.location.href = "dashboards/manager-dashboard.html";
+      window.location.href = "manager-dashboard/manager-dashboard.html";
     } else {
       alert("Unknown role. Please contact support.");
     }
