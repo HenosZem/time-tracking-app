@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Submit Time-Off Request</title>
+  <style>
+    a.button {
+      display: inline-block;
+      padding: 10px;
+      background: #007BFF;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+    }
+    a.button:hover {
+      background: #0056b3;
+    }
+    form {
+      margin-top: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, textarea {
+      width: 300px;
+      padding: 5px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 15px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Submit Time-Off Request</h1>
+  <p>This page will allow employees to request time off.</p>
+
+  <form id="timeoff-form">
+    <label for="start-date">Start Date:</label>
+    <input type="date" id="start-date" required>
+
+    <label for="end-date">End Date:</label>
+    <input type="date" id="end-date" required>
+
+    <label for="reason">Reason:</label>
+    <textarea id="reason" rows="4" required></textarea>
+
+    <button type="submit">Submit Request</button>
+  </form>
+
+  <p id="message"></p>
+
+  <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
+
+  <!-- IMPORTANT: Use type="module" to support ES module imports in the JS -->
+  <script type="module" src="employee-timeoff.js"></script>
+</body>
+</html>

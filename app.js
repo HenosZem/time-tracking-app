@@ -97,7 +97,7 @@ if (loginForm) {
     if (!role) {
       alert("Your role has not been assigned yet. Please wait for a manager.");
     } else if (role === "employee") {
-      window.location.href = "dashboards/employee-dashboard.html";
+      window.location.href = "employee-dashboard/employee-dashboard.html";
     } else if (role === "manager") {
       window.location.href = "dashboards/manager-dashboard.html";
     } else {
