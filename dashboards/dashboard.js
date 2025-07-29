@@ -5,7 +5,10 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 window.showSection = function(section) {
   document.querySelectorAll('section').forEach(sec => sec.classList.add('hidden'));
-  document.getElementById(section).classList.remove('hidden');
+  const el = document.getElementById(section);
+  if (el) {
+    el.classList.remove('hidden');
+  }
 };
 
 // Clock In/Clock Out for Manager/Admin
@@ -47,6 +50,8 @@ async function clockOut() {
   const { error } = await supabase.from('time_entries').update({ clock_out }).eq('id', entry_id);
   document.getElementById('clock-msg').innerText = error ? 'Clock Out failed: ' + error.message : 'Clocked Out!';
 }
+window.clockIn = clockIn;
+window.clockOut = clockOut;
 
 // Check if user is manager
 supabase.auth.getUser().then(async ({ data: { user }, error }) => {
@@ -65,47 +70,14 @@ supabase.auth.getUser().then(async ({ data: { user }, error }) => {
   }
 });
 
-// Employee Management - allow pay rate adjustment
-async function loadEmployees() {
-  const { data, error } = await supabase.from('profiles').select('*').eq('role', 'employee');
-  if (error) return document.getElementById('employee-table').innerText = 'Error loading employees';
-  let html = `<table><tr><th>Name</th><th>Email</th><th>Hourly Rate</th><th>Action</th></tr>`;
-  data.forEach(emp => {
-    html += `<tr>
-      <td>${emp.full_name}</td>
-      <td>${emp.email || '-'}</td>
-      <td><input type='number' id='rate-${emp.user_id}' value='${emp.hourly_rate || 0}' style='width:70px;' /></td>
-      <td><button onclick="editEmployee('${emp.user_id}','${emp.full_name}','${emp.email || ''}',document.getElementById('rate-${emp.user_id}').value)">Edit</button></td>
-    </tr>`;
-  });
-  html += '</table>';
-  document.getElementById('employee-table').innerHTML = html;
-}
-window.editEmployee = function(id, name, email, hourly_rate) {
-  document.getElementById('emp-id').value = id;
-  document.getElementById('emp-name').value = name;
-  document.getElementById('emp-email').value = email;
-  document.getElementById('emp-hourly-rate').value = hourly_rate;
-};
-document.getElementById('update-employee-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const id = document.getElementById('emp-id').value;
-  const name = document.getElementById('emp-name').value;
-  const email = document.getElementById('emp-email').value;
-  const hourly_rate = document.getElementById('emp-hourly-rate').value;
-  const { error } = await supabase.from('profiles').update({ full_name: name, email, hourly_rate }).eq('user_id', id);
-  if (error) alert('Update failed: ' + error.message);
-  else { alert('Employee updated'); loadEmployees(); }
-});
-
 // Timesheet Overview with filter
 async function loadTimesheets() {
   let filterName = document.getElementById('filter-name')?.value || '';
   let filterDate = document.getElementById('filter-date')?.value || '';
   let query = supabase.from('time_entries').select('*');
   if (filterName) {
-    let { data: profiles } = await supabase.from('profiles').select('id, full_name').ilike('full_name', `%${filterName}%`);
-    let ids = profiles ? profiles.map(p => p.id) : [];
+    let { data: profiles } = await supabase.from('profiles').select('user_id, name').ilike('name', `%${filterName}%`);
+    let ids = profiles ? profiles.map(p => p.user_id) : [];
     query = query.in('user_id', ids);
   }
   if (filterDate) {
@@ -113,18 +85,22 @@ async function loadTimesheets() {
   }
   const { data: entries, error: entriesError } = await query;
   if (entriesError) return document.getElementById('timesheet-table').innerText = 'Error loading timesheets';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, full_name');
+  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
   if (profilesError) return document.getElementById('timesheet-table').innerText = 'Error loading profiles';
   const idToName = {};
-  profiles.forEach(p => idToName[p.id] = p.full_name);
+  profiles.forEach(p => idToName[p.user_id] = p.name);
   let html = `<input id='filter-name' placeholder='Filter by name' style='margin-bottom:5px;' oninput='loadTimesheets()' /> <input id='filter-date' type='date' style='margin-bottom:5px;' onchange='loadTimesheets()' />`;
-  html += `<table><tr><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Total Hours</th></tr>`;
+  html += `<table><tr><th>Employee Name</th><th>Clock In</th><th>Clock Out</th><th>Total Hours</th></tr>`;
   entries.forEach(entry => {
-    let total_hours = entry.clock_in && entry.clock_out ? ((new Date(entry.clock_out) - new Date(entry.clock_in))/3600000).toFixed(2) : '-';
+    let total_hours = entry.clock_in && entry.clock_out ? ((new Date(entry.clock_out) - new Date(entry.clock_in))/3600000) : null;
+    if (total_hours !== null) total_hours = total_hours < 0 ? '-' : total_hours.toFixed(2);
+    else total_hours = '-';
+    let clockInStr = entry.clock_in ? luxon.DateTime.fromISO(entry.clock_in, { zone: 'utc' }).setZone('America/New_York').toFormat('MMM dd, yyyy, h:mm:ss a') : '-';
+    let clockOutStr = entry.clock_out ? luxon.DateTime.fromISO(entry.clock_out, { zone: 'utc' }).setZone('America/New_York').toFormat('MMM dd, yyyy, h:mm:ss a') : '-';
     html += `<tr>
       <td>${idToName[entry.user_id] || entry.user_id}</td>
-      <td>${entry.clock_in ? entry.clock_in.replace('T',' ').slice(0,16) : '-'}</td>
-      <td>${entry.clock_out ? entry.clock_out.replace('T',' ').slice(0,16) : '-'}</td>
+      <td>${clockInStr}</td>
+      <td>${clockOutStr}</td>
       <td>${total_hours}</td>
     </tr>`;
   });
@@ -136,10 +112,10 @@ async function loadTimesheets() {
 async function loadPayroll() {
   const { data: reports, error: reportsError } = await supabase.from('payroll_reports').select('*');
   if (reportsError) return document.getElementById('payroll-table').innerText = 'Error loading payroll';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, name');
+  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
   if (profilesError) return document.getElementById('payroll-table').innerText = 'Error loading profiles';
   const idToName = {};
-  profiles.forEach(p => idToName[p.id] = p.name);
+  profiles.forEach(p => idToName[p.user_id] = p.name);
   let html = `<table><tr><th>Employee</th><th>Pay Period</th><th>Total Hours</th><th>Gross Pay</th></tr>`;
   reports.forEach(row => {
     html += `<tr>
@@ -156,10 +132,10 @@ async function loadPayroll() {
 // Payroll Calculation Controls
 async function loadPayrollCalcSelectors() {
   // Employees
-  const { data: employees, error: empError } = await supabase.from('profiles').select('id, name').eq('role', 'employee');
+  const { data: employees, error: empError } = await supabase.from('profiles').select('user_id, name').eq('role', 'employee');
   const empSel = document.getElementById('payroll-employee-select');
   empSel.innerHTML = empError ? `<option>Error</option>` :
-    employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+    employees.map(e => `<option value="${e.user_id}">${e.name}</option>`).join('');
 
   // Pay Periods
   const { data: periods, error: perError } = await supabase.from('pay_periods').select('id, start_date, end_date').order('start_date', { ascending: false });
@@ -226,16 +202,18 @@ document.getElementById('payroll-calc-form').addEventListener('submit', function
 async function loadEditEntries() {
   const { data: entries, error: entriesError } = await supabase.from('time_entries').select('*');
   if (entriesError) return document.getElementById('edit-table').innerText = 'Error loading entries';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, name');
+  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
   if (profilesError) return document.getElementById('edit-table').innerText = 'Error loading profiles';
   const idToName = {};
-  profiles.forEach(p => idToName[p.id] = p.name);
+  profiles.forEach(p => idToName[p.user_id] = p.name);
   let html = `<table><tr><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Edit</th></tr>`;
   entries.forEach(entry => {
+    let clockInLocal = entry.clock_in ? luxon.DateTime.fromISO(entry.clock_in, { zone: 'utc' }).setZone('America/New_York').toFormat("yyyy-MM-dd'T'HH:mm") : '';
+    let clockOutLocal = entry.clock_out ? luxon.DateTime.fromISO(entry.clock_out, { zone: 'utc' }).setZone('America/New_York').toFormat("yyyy-MM-dd'T'HH:mm") : '';
     html += `<tr>
       <td>${idToName[entry.user_id] || entry.user_id}</td>
-      <td><input type="datetime-local" value="${entry.clock_in ? entry.clock_in.replace('Z','').slice(0,16) : ''}" id="in-${entry.id}" /></td>
-      <td><input type="datetime-local" value="${entry.clock_out ? entry.clock_out.replace('Z','').slice(0,16) : ''}" id="out-${entry.id}" /></td>
+      <td><input type="datetime-local" value="${clockInLocal}" id="in-${entry.id}" /></td>
+      <td><input type="datetime-local" value="${clockOutLocal}" id="out-${entry.id}" /></td>
       <td><button onclick="updateEntry('${entry.id}')">Save</button></td>
     </tr>`;
   });
@@ -255,10 +233,10 @@ window.updateEntry = async function(id) {
 async function loadTimeOffRequests() {
   const { data: requests, error: requestsError } = await supabase.from('time_off_requests').select('*');
   if (requestsError) return document.getElementById('timeoff-table').innerText = 'Error loading requests';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, name');
+  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
   if (profilesError) return document.getElementById('timeoff-table').innerText = 'Error loading profiles';
   const idToName = {};
-  profiles.forEach(p => idToName[p.id] = p.name);
+  profiles.forEach(p => idToName[p.user_id] = p.name);
   let html = `<table><tr><th>Employee</th><th>Start</th><th>End</th><th>Reason</th><th>Status</th><th>Action</th></tr>`;
   requests.forEach(req => {
     html += `<tr>
@@ -290,6 +268,41 @@ window.rejectRequest = async function(id) {
   if (error) alert('Rejection failed: ' + error.message);
   else { alert('Request rejected'); loadTimeOffRequests(); }
 };
+
+// Employee Management - allow pay rate adjustment
+async function loadEmployees() {
+  const { data: profiles, error } = await supabase.from('profiles').select('*');
+  if (error) return document.getElementById('employee-table').innerText = 'Error loading employees';
+  // Build id-to-name map
+  const idToName = {};
+  profiles.forEach(p => idToName[p.user_id] = p.name || p.email || p.user_id);
+  // Filter for employees
+  const employees = profiles.filter(p => p.role && p.role.trim().toLowerCase() === 'employee');
+  let html = `<table><tr><th>Name</th><th>Hourly Rate</th><th>Action</th></tr>`;
+  employees.forEach(emp => {
+    html += `<tr>
+      <td>${idToName[emp.user_id]}</td>
+      <td><input type='number' id='rate-${emp.user_id}' value='${emp.hourly_rate || 0}' style='width:70px;' /></td>
+      <td><button onclick="editEmployee('${emp.user_id}','${idToName[emp.user_id]}',document.getElementById('rate-${emp.user_id}').value)">Edit</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  document.getElementById('employee-table').innerHTML = html;
+}
+window.editEmployee = function(id, name, hourly_rate) {
+  document.getElementById('emp-id').value = id;
+  document.getElementById('emp-name').value = name;
+  document.getElementById('emp-hourly-rate').value = hourly_rate;
+};
+document.getElementById('update-employee-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const id = document.getElementById('emp-id').value;
+  const name = document.getElementById('emp-name').value;
+  const hourly_rate = document.getElementById('emp-hourly-rate').value;
+  const { error } = await supabase.from('profiles').update({ name, hourly_rate }).eq('user_id', id);
+  if (error) alert('Update failed: ' + error.message);
+  else { alert('Employee updated'); loadEmployees(); }
+});
 
 // Load initial section and set tab listeners
 showSection('employee-management');
