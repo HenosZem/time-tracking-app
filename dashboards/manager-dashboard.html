@@ -25,15 +25,14 @@
     <a href="#" class="button" onclick="showSection('edit-entries')">Edit Entries</a>
     <a href="#" class="button" onclick="showSection('timeoff-approval')">Time-Off Approval</a>
     <a href="../login.html" class="button">Logout</a>
-  </nav>
-
-  <!-- Manager/Admin Clock In/Out Section -->
-  <section id="clock-in-out">
-    <h2>Clock In/Out</h2>
+    <span style="margin-left: 20px;"></span>
     <button onclick="clockIn()">Clock In</button>
     <button onclick="clockOut()">Clock Out</button>
-    <div id="clock-msg"></div>
-  </section>
+    <span id="clock-msg" style="margin-left: 10px;"></span>
+  </nav>
+
+  <!-- Manager/Admin Clock In/Out Section (always visible) -->
+  <section id="clock-in-out" style="display:none;"></section>
 
   <!-- Employee Management Section -->
   <section id="employee-management" class="hidden">
@@ -43,7 +42,6 @@
     <form id="update-employee-form">
       <input type="hidden" id="emp-id" />
       Name: <input type="text" id="emp-name" required />
-      Email: <input type="email" id="emp-email" required />
       Hourly Rate: <input type="number" id="emp-hourly-rate" min="0" step="0.01" required />
       <button type="submit">Update</button>
     </form>
@@ -94,6 +92,7 @@
 
  
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html> 
