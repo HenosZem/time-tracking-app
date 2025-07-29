@@ -70,133 +70,466 @@ supabase.auth.getUser().then(async ({ data: { user }, error }) => {
   }
 });
 
-// Timesheet Overview with filter
+// Timesheet Overview with enhanced filtering
 async function loadTimesheets() {
-  let filterName = document.getElementById('filter-name')?.value || '';
-  let filterDate = document.getElementById('filter-date')?.value || '';
-  let query = supabase.from('time_entries').select('*');
-  if (filterName) {
-    let { data: profiles } = await supabase.from('profiles').select('user_id, name').ilike('name', `%${filterName}%`);
-    let ids = profiles ? profiles.map(p => p.user_id) : [];
-    query = query.in('user_id', ids);
-  }
-  if (filterDate) {
-    query = query.gte('clock_in', filterDate + 'T00:00:00').lte('clock_in', filterDate + 'T23:59:59');
-  }
-  const { data: entries, error: entriesError } = await query;
-  if (entriesError) return document.getElementById('timesheet-table').innerText = 'Error loading timesheets';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
-  if (profilesError) return document.getElementById('timesheet-table').innerText = 'Error loading profiles';
-  const idToName = {};
-  profiles.forEach(p => idToName[p.user_id] = p.name);
-  let html = `<input id='filter-name' placeholder='Filter by name' style='margin-bottom:5px;' oninput='loadTimesheets()' /> <input id='filter-date' type='date' style='margin-bottom:5px;' onchange='loadTimesheets()' />`;
-  html += `<table><tr><th>Employee Name</th><th>Clock In</th><th>Clock Out</th><th>Total Hours</th></tr>`;
-  entries.forEach(entry => {
-    let total_hours = entry.clock_in && entry.clock_out ? ((new Date(entry.clock_out) - new Date(entry.clock_in))/3600000) : null;
-    if (total_hours !== null) total_hours = total_hours < 0 ? '-' : total_hours.toFixed(2);
-    else total_hours = '-';
-    let clockInStr = entry.clock_in ? luxon.DateTime.fromISO(entry.clock_in, { zone: 'utc' }).setZone('America/New_York').toFormat('MMM dd, yyyy, h:mm:ss a') : '-';
-    let clockOutStr = entry.clock_out ? luxon.DateTime.fromISO(entry.clock_out, { zone: 'utc' }).setZone('America/New_York').toFormat('MMM dd, yyyy, h:mm:ss a') : '-';
-    html += `<tr>
-      <td>${idToName[entry.user_id] || entry.user_id}</td>
-      <td>${clockInStr}</td>
-      <td>${clockOutStr}</td>
-      <td>${total_hours}</td>
-    </tr>`;
-  });
-  html += '</table>';
-  document.getElementById('timesheet-table').innerHTML = html;
-}
-
-// Payroll Summary
-async function loadPayroll() {
-  const { data: reports, error: reportsError } = await supabase.from('payroll_reports').select('*');
-  if (reportsError) return document.getElementById('payroll-table').innerText = 'Error loading payroll';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
-  if (profilesError) return document.getElementById('payroll-table').innerText = 'Error loading profiles';
-  const idToName = {};
-  profiles.forEach(p => idToName[p.user_id] = p.name);
-  let html = `<table><tr><th>Employee</th><th>Pay Period</th><th>Total Hours</th><th>Gross Pay</th></tr>`;
-  reports.forEach(row => {
-    html += `<tr>
-      <td>${idToName[row.user_id] || row.user_id}</td>
-      <td>${row.pay_period_id}</td>
-      <td>${row.total_hours}</td>
-      <td>$${row.gross_pay}</td>
-    </tr>`;
-  });
-  html += '</table>';
-  document.getElementById('payroll-table').innerHTML = html;
-}
-
-// Payroll Calculation Controls
-async function loadPayrollCalcSelectors() {
-  // Employees
-  const { data: employees, error: empError } = await supabase.from('profiles').select('user_id, name').eq('role', 'employee');
-  const empSel = document.getElementById('payroll-employee-select');
-  empSel.innerHTML = empError ? `<option>Error</option>` :
-    employees.map(e => `<option value="${e.user_id}">${e.name}</option>`).join('');
-
-  // Pay Periods
-  const { data: periods, error: perError } = await supabase.from('pay_periods').select('id, start_date, end_date').order('start_date', { ascending: false });
-  const perSel = document.getElementById('payroll-period-select');
-  perSel.innerHTML = perError ? `<option>Error</option>` :
-    periods.map(p => `<option value="${p.id}">${p.start_date} to ${p.end_date}</option>`).join('');
-}
-
-async function calculatePayrollForEmployeePeriod(empId, periodId) {
-  // Get pay period
-  const { data: period, error: periodError } = await supabase.from('pay_periods').select('start_date, end_date').eq('id', periodId).single();
-  if (periodError || !period) {
-    document.getElementById('payroll-calc-result').innerText = "Error getting pay period.";
-    return;
-  }
-  // Get employee
-  const { data: emp, error: empError } = await supabase.from('profiles').select('id, name, hourly_rate').eq('id', empId).single();
-  if (empError || !emp) {
-    document.getElementById('payroll-calc-result').innerText = "Error getting employee.";
-    return;
-  }
-  // Get time entries for employee in period
-  const { data: entries, error: entriesError } = await supabase
-    .from('time_entries')
-    .select('clock_in, clock_out')
-    .eq('user_id', empId)
-    .gte('clock_in', period.start_date)
-    .lte('clock_out', period.end_date);
-
-  if (entriesError) {
-    document.getElementById('payroll-calc-result').innerText = "Error loading entries.";
-    return;
-  }
-  // Calculate total hours
-  let totalHours = 0;
-  entries.forEach(entry => {
-    if (entry.clock_in && entry.clock_out) {
-      const inTime = new Date(entry.clock_in);
-      const outTime = new Date(entry.clock_out);
-      const hours = (outTime - inTime) / (1000 * 60 * 60);
-      totalHours += hours;
+  try {
+    // Show loading state
+    document.getElementById('timesheet-table').innerHTML = '<p>Loading timesheets...</p>';
+    
+    // Get filter values
+    const filterName = document.getElementById('filter-name').value.trim();
+    const dateRange = document.getElementById('date-range').value;
+    
+    let startDate, endDate;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Set date range based on selection
+    switch(dateRange) {
+      case 'today':
+        startDate = new Date(today);
+        endDate = new Date(today);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+        
+      case 'pay-period':
+        // Get current pay period (Thursday to Thursday)
+        startDate = new Date(today);
+        while (startDate.getDay() !== 4) { // 4 = Thursday
+          startDate.setDate(startDate.getDate() - 1);
+        }
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+        
+      case 'month':
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+        
+      case 'custom':
+        const customStart = document.getElementById('start-date').value;
+        const customEnd = document.getElementById('end-date').value;
+        if (!customStart || !customEnd) {
+          throw new Error('Please select both start and end dates');
+        }
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+        endDate.setHours(23, 59, 59, 999);
+        break;
     }
-  });
-  totalHours = totalHours.toFixed(2);
-  const grossPay = (totalHours * parseFloat(emp.hourly_rate)).toFixed(2);
-
-  document.getElementById('payroll-calc-result').innerHTML = `
-    <strong>${emp.name}</strong><br>
-    Pay Period: ${period.start_date} to ${period.end_date}<br>
-    Total Hours: ${totalHours}<br>
-    Hourly Rate: $${emp.hourly_rate}<br>
-    <strong>Gross Pay: $${grossPay}</strong>
-  `;
+    
+    // First get all relevant profiles if name filter is applied
+    let profileIds = [];
+    if (filterName) {
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .ilike('name', `%${filterName}%`);
+      
+      if (profileError) throw profileError;
+      profileIds = profiles.map(p => p.user_id);
+    }
+    
+    // Build the time entries query
+    let query = supabase
+      .from('time_entries')
+      .select(`
+        id,
+        user_id,
+        clock_in,
+        clock_out,
+        total_hours,
+        name
+      `)
+      .gte('clock_in', startDate.toISOString())
+      .lte('clock_in', endDate.toISOString());
+    
+    // Apply name filter if provided
+    if (filterName && profileIds.length > 0) {
+      query = query.in('user_id', profileIds);
+    } else if (filterName) {
+      // If name filter was provided but no profiles matched
+      document.getElementById('timesheet-table').innerHTML = '<p>No employees found matching that name</p>';
+      return;
+    }
+    
+    // Execute query
+    const { data: entries, error } = await query;
+    
+    if (error) throw error;
+    
+    // Get all employee names in one query
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, name');
+    
+    if (profilesError) throw profilesError;
+    
+    // Create a mapping of user_id to name
+    const idToName = {};
+    profiles.forEach(p => idToName[p.user_id] = p.name);
+    
+    // Build the table
+    let html = `
+      <div class="timesheet-summary">
+        Showing ${entries.length} entries from 
+        ${luxon.DateTime.fromJSDate(startDate).toFormat('MMM dd, yyyy')} to 
+        ${luxon.DateTime.fromJSDate(endDate).toFormat('MMM dd, yyyy')}
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Clock In</th>
+            <th>Clock Out</th>
+            <th>Total Hours</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    if (entries.length === 0) {
+      html += '<tr><td colspan="5" style="text-align: center;">No entries found</td></tr>';
+    } else {
+      entries.forEach(entry => {
+        const clockIn = entry.clock_in ? 
+          luxon.DateTime.fromISO(entry.clock_in).setZone('America/New_York').toFormat('h:mm a') : '-';
+        const clockOut = entry.clock_out ? 
+          luxon.DateTime.fromISO(entry.clock_out).setZone('America/New_York').toFormat('h:mm a') : '-';
+        const date = entry.clock_in ? 
+          luxon.DateTime.fromISO(entry.clock_in).setZone('America/New_York').toFormat('MMM dd, yyyy') : '-';
+        const totalHours = entry.total_hours ? 
+          parseFloat(entry.total_hours).toFixed(2) : '-';
+        
+        // Use name from time_entries if available, otherwise from profiles
+        const employeeName = entry.name || idToName[entry.user_id] || 'Unknown';
+        
+        html += `
+          <tr>
+            <td>${employeeName}</td>
+            <td>${clockIn}</td>
+            <td>${clockOut}</td>
+            <td>${totalHours}</td>
+            <td>${date}</td>
+          </tr>
+        `;
+      });
+    }
+    
+    html += '</tbody></table>';
+    document.getElementById('timesheet-table').innerHTML = html;
+    
+  } catch (error) {
+    console.error('Error loading timesheets:', error);
+    document.getElementById('timesheet-table').innerHTML = `
+      <div class="error-message">
+        Error: ${error.message}
+        <button onclick="loadTimesheets()">Retry</button>
+      </div>
+    `;
+  }
 }
 
-document.getElementById('payroll-calc-form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const empId = document.getElementById('payroll-employee-select').value;
-  const periodId = document.getElementById('payroll-period-select').value;
-  calculatePayrollForEmployeePeriod(empId, periodId);
-});
+// Update date filters when range selection changes
+window.updateDateFilters = function() {
+  const range = document.getElementById('date-range').value;
+  const customGroup = document.getElementById('custom-range-group');
+  
+  if (range === 'custom') {
+    customGroup.style.display = 'flex';
+  } else {
+    customGroup.style.display = 'none';
+    loadTimesheets(); // Auto-refresh when changing to predefined ranges
+  }
+};
+
+// Initialize date pickers with current pay period
+function initDatePickers() {
+  const today = new Date();
+  let startDate = new Date(today);
+  
+  // Find most recent Thursday
+  while (startDate.getDay() !== 4) { // 4 = Thursday
+    startDate.setDate(startDate.getDate() - 1);
+  }
+  
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6);
+  
+  document.getElementById('start-date').valueAsDate = startDate;
+  document.getElementById('end-date').valueAsDate = endDate;
+}
+
+// Add this to your initialization section
+initDatePickers();
+
+// Payroll Summary Functions
+async function initPayrollSection() {
+  // Load employees
+  const { data: employees, error } = await supabase
+    .from('profiles')
+    .select('user_id, name, hourly_rate')
+    .eq('role', 'employee')
+    .order('name', { ascending: true });
+  
+  if (error) {
+    console.error('Error loading employees:', error);
+    return;
+  }
+  
+  const employeeSelect = document.getElementById('payroll-employee');
+  employeeSelect.innerHTML = employees.map(e => 
+    `<option value="${e.user_id}">${e.name} ($${e.hourly_rate}/hr)</option>`
+  ).join('');
+  
+  // Set up event listeners
+  document.getElementById('pay-period').addEventListener('change', function() {
+    const customGroup = document.getElementById('custom-period-group');
+    customGroup.style.display = this.value === 'custom' ? 'flex' : 'none';
+  });
+  
+  document.getElementById('generate-payroll').addEventListener('click', generatePayrollReport);
+  document.getElementById('export-payroll').addEventListener('click', exportPayrollToCSV);
+  
+  // Set default custom dates to current pay period
+  const { startDate, endDate } = getCurrentPayPeriod();
+  document.getElementById('custom-start').valueAsDate = startDate;
+  document.getElementById('custom-end').valueAsDate = endDate;
+}
+
+function getCurrentPayPeriod() {
+  const today = new Date();
+  let startDate = new Date(today);
+  
+  // Find most recent Thursday (pay period starts Thursday)
+  while (startDate.getDay() !== 4) {
+    startDate.setDate(startDate.getDate() - 1);
+  }
+  
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6); // Pay period ends next Wednesday
+  
+  return { startDate, endDate };
+}
+
+async function generatePayrollReport() {
+  try {
+    const employeeId = document.getElementById('payroll-employee').value;
+    const periodType = document.getElementById('pay-period').value;
+    
+    if (!employeeId) {
+      throw new Error('Please select an employee');
+    }
+    
+    let startDate, endDate;
+    
+    switch(periodType) {
+      case 'current':
+        ({ startDate, endDate } = getCurrentPayPeriod());
+        break;
+      case 'previous':
+        ({ startDate, endDate } = getCurrentPayPeriod());
+        startDate.setDate(startDate.getDate() - 7);
+        endDate.setDate(endDate.getDate() - 7);
+        break;
+      case 'custom':
+        startDate = new Date(document.getElementById('custom-start').value);
+        endDate = new Date(document.getElementById('custom-end').value);
+        
+        if (!startDate || !endDate) {
+          throw new Error('Please select both start and end dates');
+        }
+        
+        if (startDate > endDate) {
+          throw new Error('End date must be after start date');
+        }
+        
+        // Include full end date
+        endDate.setHours(23, 59, 59, 999);
+        break;
+    }
+    
+    // Get employee details
+    const { data: employee, error: empError } = await supabase
+      .from('profiles')
+      .select('name, hourly_rate')
+      .eq('user_id', employeeId)
+      .single();
+    
+    if (empError || !employee) {
+      throw new Error('Error loading employee details');
+    }
+    
+    // Get time entries for the period
+    const { data: entries, error: entriesError } = await supabase
+      .from('time_entries')
+      .select('*')
+      .eq('user_id', employeeId)
+      .gte('clock_in', startDate.toISOString())
+      .lte('clock_in', endDate.toISOString())
+      .order('clock_in', { ascending: true });
+    
+    if (entriesError) {
+      throw entriesError;
+    }
+    
+    // Calculate totals
+    let totalHours = 0;
+    const shifts = [];
+    
+    entries.forEach(entry => {
+      if (entry.clock_in && entry.clock_out) {
+        const clockIn = new Date(entry.clock_in);
+        const clockOut = new Date(entry.clock_out);
+        const hours = (clockOut - clockIn) / (1000 * 60 * 60); // Convert ms to hours
+        totalHours += hours;
+        
+        shifts.push({
+          date: luxon.DateTime.fromJSDate(clockIn).toFormat('MMM dd, yyyy'),
+          clockIn: luxon.DateTime.fromJSDate(clockIn).toFormat('h:mm a'),
+          clockOut: luxon.DateTime.fromJSDate(clockOut).toFormat('h:mm a'),
+          hours: hours.toFixed(2)
+        });
+      }
+    });
+    
+    const grossPay = totalHours * employee.hourly_rate;
+    
+    // Build the report HTML
+    let html = `
+      <div class="report-header">
+        <h3>Payroll Report for ${employee.name}</h3>
+        <p>Period: ${luxon.DateTime.fromJSDate(startDate).toFormat('MMM dd, yyyy')} to 
+           ${luxon.DateTime.fromJSDate(endDate).toFormat('MMM dd, yyyy')}</p>
+      </div>
+      
+      <table class="payroll-summary-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Hourly Rate</th>
+            <th>Total Hours</th>
+            <th>Gross Pay</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${employee.name}</td>
+            <td>$${employee.hourly_rate.toFixed(2)}</td>
+            <td>${totalHours.toFixed(2)}</td>
+            <td>$${grossPay.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <h4>Shift Details</h4>
+      <table class="shift-details-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Clock In</th>
+            <th>Clock Out</th>
+            <th>Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    shifts.forEach(shift => {
+      html += `
+        <tr>
+          <td>${shift.date}</td>
+          <td>${shift.clockIn}</td>
+          <td>${shift.clockOut}</td>
+          <td>${shift.hours}</td>
+        </tr>
+      `;
+    });
+    
+    // Add total row
+    html += `
+        <tr class="total-row">
+          <td colspan="3">Total</td>
+          <td>${totalHours.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
+    `;
+    
+    document.getElementById('payroll-report').innerHTML = html;
+    document.getElementById('export-payroll').disabled = false;
+    
+    // Store data for export
+    currentPayrollReport = {
+      employee,
+      period: { startDate, endDate },
+      totalHours,
+      grossPay,
+      shifts
+    };
+    
+  } catch (error) {
+    console.error('Error generating payroll report:', error);
+    document.getElementById('payroll-report').innerHTML = `
+      <div class="error-message">
+        Error: ${error.message}
+      </div>
+    `;
+    document.getElementById('export-payroll').disabled = true;
+  }
+}
+
+function exportPayrollToCSV() {
+  if (!currentPayrollReport) return;
+  
+  const { employee, period, totalHours, grossPay, shifts } = currentPayrollReport;
+  
+  // Create CSV content
+  let csvContent = "data:text/csv;charset=utf-8,";
+  
+  // Add header
+  csvContent += `Payroll Report for ${employee.name}\n`;
+  csvContent += `Period: ${luxon.DateTime.fromJSDate(period.startDate).toFormat('MMM dd, yyyy')} to ${luxon.DateTime.fromJSDate(period.endDate).toFormat('MMM dd, yyyy')}\n\n`;
+  
+  // Add summary
+  csvContent += "Summary\n";
+  csvContent += `Employee,${employee.name}\n`;
+  csvContent += `Hourly Rate,$${employee.hourly_rate.toFixed(2)}\n`;
+  csvContent += `Total Hours,${totalHours.toFixed(2)}\n`;
+  csvContent += `Gross Pay,$${grossPay.toFixed(2)}\n\n`;
+  
+  // Add shift details header
+  csvContent += "Shift Details\n";
+  csvContent += "Date,Clock In,Clock Out,Hours\n";
+  
+  // Add shift data
+  shifts.forEach(shift => {
+    csvContent += `${shift.date},${shift.clockIn},${shift.clockOut},${shift.hours}\n`;
+  });
+  
+  // Add total
+  csvContent += `Total,,,${totalHours.toFixed(2)}\n`;
+  
+  // Create download link
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `payroll_${employee.name.replace(/\s+/g, '_')}_${luxon.DateTime.fromJSDate(period.startDate).toFormat('yyyy-MM-dd')}_to_${luxon.DateTime.fromJSDate(period.endDate).toFormat('yyyy-MM-dd')}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Initialize when page loads
+let currentPayrollReport = null;
+initPayrollSection();
+
+// Update tab listener
+document.querySelector('a[onclick*="payroll-summary"]').addEventListener('click', initPayrollSection);
 
 // Edit Entries
 async function loadEditEntries() {
@@ -269,46 +602,136 @@ window.rejectRequest = async function(id) {
   else { alert('Request rejected'); loadTimeOffRequests(); }
 };
 
-// Employee Management - allow pay rate adjustment
+// Employee Management Functions
 async function loadEmployees() {
-  const { data: profiles, error } = await supabase.from('profiles').select('*');
-  if (error) return document.getElementById('employee-table').innerText = 'Error loading employees';
-  // Build id-to-name map
-  const idToName = {};
-  profiles.forEach(p => idToName[p.user_id] = p.name || p.email || p.user_id);
-  // Filter for employees
-  const employees = profiles.filter(p => p.role && p.role.trim().toLowerCase() === 'employee');
-  let html = `<table><tr><th>Name</th><th>Hourly Rate</th><th>Action</th></tr>`;
-  employees.forEach(emp => {
-    html += `<tr>
-      <td>${idToName[emp.user_id]}</td>
-      <td><input type='number' id='rate-${emp.user_id}' value='${emp.hourly_rate || 0}' style='width:70px;' /></td>
-      <td><button onclick="editEmployee('${emp.user_id}','${idToName[emp.user_id]}',document.getElementById('rate-${emp.user_id}').value)">Edit</button></td>
-    </tr>`;
-  });
-  html += '</table>';
-  document.getElementById('employee-table').innerHTML = html;
+  try {
+    // Show loading state
+    document.getElementById('employee-table').innerHTML = '<p>Loading employees...</p>';
+    
+    // Get all employees
+    const { data: employees, error } = await supabase
+      .from('profiles')
+      .select('user_id, name, email, hourly_rate, role')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    // Filter to only show employees (not managers)
+    const filteredEmployees = employees.filter(emp => emp.role === 'employee');
+
+    // Build the table
+    let html = `
+      <table class="employee-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Hourly Rate</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    if (filteredEmployees.length === 0) {
+      html += '<tr><td colspan="4" style="text-align: center;">No employees found</td></tr>';
+    } else {
+      filteredEmployees.forEach(emp => {
+        html += `
+          <tr id="emp-row-${emp.user_id}">
+            <td>
+              <input type="text" id="name-${emp.user_id}" 
+                     value="${emp.name || ''}" 
+                     placeholder="No name">
+            </td>
+            <td>
+              <input type="email" id="email-${emp.user_id}" 
+                     value="${emp.email || ''}" 
+                     placeholder="No email">
+            </td>
+            <td>
+              <input type="number" id="rate-${emp.user_id}" 
+                     value="${emp.hourly_rate || 0}" 
+                     step="0.01" min="0">
+            </td>
+            <td>
+              <button onclick="updateEmployee('${emp.user_id}')" 
+                      class="save-btn">Save</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('employee-table').innerHTML = html;
+
+  } catch (error) {
+    console.error('Error loading employees:', error);
+    document.getElementById('employee-table').innerHTML = `
+      <div class="error-message">
+        Error loading employees: ${error.message}
+        <button onclick="loadEmployees()">Retry</button>
+      </div>
+    `;
+  }
 }
-window.editEmployee = function(id, name, hourly_rate) {
-  document.getElementById('emp-id').value = id;
-  document.getElementById('emp-name').value = name;
-  document.getElementById('emp-hourly-rate').value = hourly_rate;
+
+// Update employee from table row
+window.updateEmployee = async function(userId) {
+  try {
+    const name = document.getElementById(`name-${userId}`).value;
+    const email = document.getElementById(`email-${userId}`).value;
+    const hourlyRate = parseFloat(document.getElementById(`rate-${userId}`).value);
+
+    if (isNaN(hourlyRate)) {
+      throw new Error('Please enter a valid hourly rate');
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        name: name,
+        email: email, 
+        hourly_rate: hourlyRate 
+      })
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    // Visual feedback
+    const row = document.getElementById(`emp-row-${userId}`);
+    if (row) {
+      row.style.backgroundColor = '#e6ffe6';
+      setTimeout(() => row.style.backgroundColor = '', 2000);
+    }
+    alert('Employee updated successfully!');
+
+  } catch (error) {
+    console.error('Update error:', error);
+    alert(`Update failed: ${error.message}`);
+  }
 };
-document.getElementById('update-employee-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const id = document.getElementById('emp-id').value;
-  const name = document.getElementById('emp-name').value;
-  const hourly_rate = document.getElementById('emp-hourly-rate').value;
-  const { error } = await supabase.from('profiles').update({ name, hourly_rate }).eq('user_id', id);
-  if (error) alert('Update failed: ' + error.message);
-  else { alert('Employee updated'); loadEmployees(); }
-});
+
+// Initialize on page load
+showSection('employee-management');
+loadEmployees();
+
+// Set up tab listener
+document.querySelector('a[onclick*="employee-management"]').addEventListener('click', loadEmployees);
+
+// Initialize on page load
+showSection('employee-management');
+loadEmployees();
 
 // Load initial section and set tab listeners
 showSection('employee-management');
 loadEmployees();
 document.querySelector('a[onclick*="employee-management"]').addEventListener('click', loadEmployees);
-document.querySelector('a[onclick*="timesheet-overview"]').addEventListener('click', loadTimesheets);
+document.querySelector('a[onclick*="timesheet-overview"]').addEventListener('click', function() {
+  loadTimesheets();
+  initDatePickers(); // Ensure date pickers are initialized
+});
 document.querySelector('a[onclick*="payroll-summary"]').addEventListener('click', function() {
   loadPayroll();
   loadPayrollCalcSelectors();
