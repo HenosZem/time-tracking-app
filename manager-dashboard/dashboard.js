@@ -564,43 +564,186 @@ window.updateEntry = async function(id) {
 
 // Time-Off Approval
 async function loadTimeOffRequests() {
-  const { data: requests, error: requestsError } = await supabase.from('time_off_requests').select('*');
-  if (requestsError) return document.getElementById('timeoff-table').innerText = 'Error loading requests';
-  const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, name');
-  if (profilesError) return document.getElementById('timeoff-table').innerText = 'Error loading profiles';
-  const idToName = {};
-  profiles.forEach(p => idToName[p.user_id] = p.name);
-  let html = `<table><tr><th>Employee</th><th>Start</th><th>End</th><th>Reason</th><th>Status</th><th>Action</th></tr>`;
-  requests.forEach(req => {
-    html += `<tr>
-      <td>${idToName[req.user_id] || req.user_id}</td>
-      <td>${req.start_date}</td>
-      <td>${req.end_date}</td>
-      <td>${req.reason}</td>
-      <td id="status-${req.id}">${req.status}</td>
-      <td>
-        ${req.status === 'pending' ? `
-          <button onclick="approveRequest('${req.id}')">Approve</button>
-          <button onclick="rejectRequest('${req.id}')">Reject</button>
-        ` : ''}
-      </td>
-    </tr>`;
-  });
-  html += '</table>';
-  document.getElementById('timeoff-table').innerHTML = html;
+  try {
+    document.getElementById('timeoff-status').innerText = 'Loading requests...';
+    document.getElementById('timeoff-table').innerHTML = '';
+    
+    // Get current manager user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('Not authenticated');
+    
+    // Get all time-off requests
+    const { data: requests, error: requestsError } = await supabase
+      .from('time_off_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (requestsError) throw requestsError;
+    
+    // Get all employee profiles
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, name');
+    
+    if (profilesError) throw profilesError;
+    
+    const idToName = {};
+    profiles.forEach(p => idToName[p.user_id] = p.name);
+    
+    if (requests.length === 0) {
+      document.getElementById('timeoff-table').innerHTML = '<p>No time-off requests found</p>';
+      document.getElementById('timeoff-status').innerText = '';
+      return;
+    }
+    
+    let html = `
+      <table class="timeoff-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Store requests with their unique identifiers
+    const requestsWithIdentifiers = requests.map((req, index) => {
+      // Create a unique composite key for requests without ID
+      const identifier = req.id || `${req.user_id}-${req.start_date}-${req.end_date}-${index}`;
+      return { ...req, identifier };
+    });
+    
+    requestsWithIdentifiers.forEach(req => {
+      const statusCell = req.status === 'pending' 
+        ? `<span style="color: orange; font-weight: bold;">Pending</span>`
+        : req.status === 'approved'
+        ? `<span style="color: green; font-weight: bold;">Approved</span>`
+        : `<span style="color: red; font-weight: bold;">Rejected</span>`;
+      
+      html += `
+        <tr data-request-identifier="${req.identifier}">
+          <td>${idToName[req.user_id] || req.user_id}</td>
+          <td>${req.start_date}</td>
+          <td>${req.end_date}</td>
+          <td>${req.reason || '-'}</td>
+          <td class="status-cell">${statusCell}</td>
+          <td class="action-cell">
+            ${req.status === 'pending' ? `
+              <button class="approve-btn" data-action="approve">Approve</button>
+              <button class="reject-btn" data-action="reject">Reject</button>
+            ` : 'No actions available'}
+          </td>
+        </tr>
+      `;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('timeoff-table').innerHTML = html;
+    document.getElementById('timeoff-status').innerText = `Loaded ${requests.length} requests`;
+    
+    // Add event listeners to all buttons
+    document.querySelectorAll('.approve-btn, .reject-btn').forEach(button => {
+      button.addEventListener('click', async function() {
+        const row = this.closest('tr');
+        const requestIdentifier = row.dataset.requestIdentifier;
+        const action = this.dataset.action;
+        
+        try {
+          // Find the original request data
+          const originalRequest = requestsWithIdentifiers.find(
+            req => req.identifier === requestIdentifier
+          );
+          
+          if (!originalRequest) throw new Error('Could not find request data');
+          
+          // For requests with null ID, we need to delete and recreate
+          if (!originalRequest.id) {
+            // First delete the null ID record
+            const { error: deleteError } = await supabase
+              .from('time_off_requests')
+              .delete()
+              .match({
+                user_id: originalRequest.user_id,
+                start_date: originalRequest.start_date,
+                end_date: originalRequest.end_date,
+                status: 'pending'
+              });
+            
+            if (deleteError) throw deleteError;
+            
+            // Then create a new record with the updated status
+            const { data: newRequest, error: createError } = await supabase
+              .from('time_off_requests')
+              .insert([{
+                user_id: originalRequest.user_id,
+                start_date: originalRequest.start_date,
+                end_date: originalRequest.end_date,
+                reason: originalRequest.reason,
+                status: action === 'approve' ? 'approved' : 'rejected',
+                reviewed_by: user.id,
+                reviewed_at: new Date().toISOString()
+              }])
+              .select()
+              .single();
+            
+            if (createError) throw createError;
+          } else {
+            // For requests with proper IDs, just update
+            const { error: updateError } = await supabase
+              .from('time_off_requests')
+              .update({ 
+                status: action === 'approve' ? 'approved' : 'rejected',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: user.id
+              })
+              .eq('id', originalRequest.id);
+            
+            if (updateError) throw updateError;
+          }
+          
+          // Update UI
+          const statusCell = row.querySelector('.status-cell');
+          if (statusCell) {
+            statusCell.innerHTML = action === 'approve' 
+              ? '<span style="color: green; font-weight: bold;">Approved</span>'
+              : '<span style="color: red; font-weight: bold;">Rejected</span>';
+          }
+          
+          // Remove action buttons
+          const actionCell = row.querySelector('.action-cell');
+          if (actionCell) {
+            actionCell.innerHTML = 'No actions available';
+          }
+          
+          document.getElementById('timeoff-status').innerText = 
+            `Request ${action === 'approve' ? 'approved' : 'rejected'} successfully!`;
+          
+          // Reload requests to get fresh data
+          loadTimeOffRequests();
+          
+        } catch (error) {
+          console.error(`${action} failed:`, error);
+          document.getElementById('timeoff-status').innerText = 
+            `${action === 'approve' ? 'Approval' : 'Rejection'} failed: ${error.message}`;
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error loading time-off requests:', error);
+    document.getElementById('timeoff-status').innerText = `Error: ${error.message}`;
+    document.getElementById('timeoff-table').innerHTML = `
+      <div class="error-message">
+        Failed to load requests. <button onclick="loadTimeOffRequests()">Try again</button>
+      </div>
+    `;
+  }
 }
-window.approveRequest = async function(id) {
-  const reviewed_at = new Date().toISOString();
-  const { error } = await supabase.from('time_off_requests').update({ status: 'approved', reviewed_at }).eq('id', id);
-  if (error) alert('Approval failed: ' + error.message);
-  else { alert('Request approved'); loadTimeOffRequests(); }
-};
-window.rejectRequest = async function(id) {
-  const reviewed_at = new Date().toISOString();
-  const { error } = await supabase.from('time_off_requests').update({ status: 'rejected', reviewed_at }).eq('id', id);
-  if (error) alert('Rejection failed: ' + error.message);
-  else { alert('Request rejected'); loadTimeOffRequests(); }
-};
 
 // Employee Management Functions
 async function loadEmployees() {
