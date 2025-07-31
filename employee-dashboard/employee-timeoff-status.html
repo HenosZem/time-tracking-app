@@ -29,11 +29,26 @@
     a.button:hover {
       background: #0056b3;
     }
+    #refresh-btn {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #refresh-btn:hover {
+      background-color: #218838;
+    }
   </style>
 </head>
 <body>
   <h1>Time-Off Request Status</h1>
+  
+  <button id="refresh-btn">🔄 Refresh Status</button>
   <div id="status-output"><p>Loading...</p></div>
+  
   <a href="employee-dashboard.html" class="button">Back to Dashboard</a>
 
   <script type="module" src="employee-timeoff-status.js"></script>

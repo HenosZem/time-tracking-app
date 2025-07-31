@@ -19,6 +19,8 @@ async function loadTimeOffStatus() {
     return;
   }
 
+  console.log("Current user ID:", userId); // For debug
+
   const { data, error } = await supabase
     .from("time_off_requests")
     .select("start_date, end_date, reason, status")
@@ -64,4 +66,8 @@ async function loadTimeOffStatus() {
   output.innerHTML = html;
 }
 
+// Attach refresh button
+document.getElementById("refresh-btn").addEventListener("click", loadTimeOffStatus);
+
+// Initial load
 loadTimeOffStatus();
